@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>अल्टीमेट क्लाउड कलेक्शन (Smart Clean)</title>
+    <title>सेफ क्लाउड कलेक्शन (Fixed Timezone & Auto-Clean)</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f0f2f5; color: #333; padding-bottom: 60px; }
@@ -64,7 +64,6 @@
         .report-result { margin-top: 15px; background: #f8f9fa; padding: 10px; border-radius: 5px; font-size: 13px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; border: 1px solid #ddd; line-height: 1.5;}
         .tag-online { color: #17a2b8; font-size: 11px; }
         .flex-buttons { display: flex; gap: 10px; margin-bottom: 10px; }
-        .last-upload-text { font-size: 11px; color: #dc3545; font-weight: bold; text-align: center; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -101,7 +100,7 @@
     <!-- MAIN SECTION -->
     <div id="main-section" style="display:none;">
         <div class="controls" id="controls-section">
-            <label>📅 आज की तारीख</label>
+            <label>📅 तारीख चुनें (डेटा देखने/अपलोड करने के लिए)</label>
             <div class="date-row">
                 <input type="date" id="current-date" onchange="changeDate()">
             </div>
@@ -163,8 +162,15 @@
         let currentDate = "";
         let currentTab = 'HOME';
 
+        // Helper to get local Indian date string properly
+        function getLocalDateString() {
+            let tzoffset = (new Date()).getTimezoneOffset() * 60000;
+            let localISOTime = (new Date(Date.now() - tzoffset)).toISOString().slice(0, 10);
+            return localISOTime;
+        }
+
         window.onload = function() {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getLocalDateString();
             document.getElementById('current-date').value = today;
             currentDate = today;
 
@@ -185,21 +191,20 @@
         }
 
         // ==========================================
-        // SMART AUTO-CLEAN (पुरानी तारीख का डेटा फोन से डिलीट)
+        // SMART AUTO-CLEAN (पुरानी तारीख का डेटा फोन से डिलीट) - FIXED TIMEZONE
         // ==========================================
         function autoCleanMemory() {
             let changed = false;
-            // 1. पुरानी एंट्री डिलीट करो
+            // सिर्फ जो currentDate से अलग हैं, उन्हें हटाओ
             for (let dateKey in appData.records) {
                 if (dateKey !== currentDate) { delete appData.records[dateKey]; changed = true; }
             }
-            // 2. पुरानी पार्टी लिस्ट डिलीट करो
             for (let dateKey in appData.parties) {
                 if (dateKey !== currentDate) { delete appData.parties[dateKey]; changed = true; }
             }
             if (changed) { 
                 saveDataLocally(); 
-                triggerAutoSync(null); // क्लाउड में भी अपडेटेड (साफ) स्टेट सेव कर दो
+                triggerAutoSync(null); 
             }
         }
 
@@ -252,7 +257,7 @@
                     localStorage.setItem('cloud_pin', pin);
                     localStorage.setItem('cloud_name', name || mobile);
                     saveDataLocally();
-                    autoCleanMemory(); // क्लाउड से डेटा आते ही पुरानी तारीख डिलीट
+                    autoCleanMemory(); 
                     alert("✅ डेटा सफलतापूवर्क आ गया!");
                     location.reload(); 
                 }
@@ -286,7 +291,7 @@
                     appData = data;
                     normalizeAppData();
                     saveDataLocally();
-                    autoCleanMemory(); // सिंक होते ही पुरानी तारीख का डेटा डिलीट
+                    autoCleanMemory(); 
                     populateStations();
                     renderCurrentView();
                 }
@@ -304,6 +309,7 @@
         function changeDate() {
             currentDate = document.getElementById('current-date').value;
             if(!appData.records[currentDate]) appData.records[currentDate] = {};
+            autoCleanMemory(); 
             populateStations();
             renderCurrentView();
         }
@@ -322,7 +328,7 @@
             let saved = localStorage.getItem('ultimateCollectionApp_Data');
             if (saved) appData = JSON.parse(saved);
             normalizeAppData();
-            autoCleanMemory(); // ऐप खुलते ही पुरानी तारीख का डेटा फोन से डिलीट
+            autoCleanMemory(); 
             populateStations();
             renderCurrentView();
         }
@@ -494,7 +500,7 @@
                                 <input type="text" id="rem-${uniqueKey}" value="${inputData.remark || ''}" placeholder="जैसे: HDFC" oninput="autoDraft('${uniqueKey}')">
                             </div>
                             <div class="input-group" style="justify-content: flex-end;">
-                                <button id="save-btn-${uniqueKey}" class="btn-blue" style="height: 33px;" onclick="saveEntry('${uniqueKey}')">सेव</button>
+                                <button class="btn-blue" style="height: 33px;" onclick="saveEntry('${uniqueKey}')">सेव</button>
                             </div>
                         </div>
                     `;
@@ -640,10 +646,7 @@
 
             const fromDate = new Date(fromDateStr); const toDate = new Date(toDateStr);
             
-            let finalReport = `📊 *कलेक्शन रिपोर्ट*
-👤 *कलेक्शन बॉय:* ${receiverName}
-📅 ${fromDateStr} से ${toDateStr}
-`;
+            let finalReport = `📊 *कलेक्शन रिपोर्ट*\n👤 *कलेक्शन बॉय:* ${receiverName}\n📅 ${fromDateStr} से ${toDateStr}\n`;
             let totalCash = 0, totalOnline = 0, totalDisc = 0, totalExtCash = 0, count = 0;
             let dateKeys = Object.keys(appData.records).sort();
             
@@ -653,9 +656,7 @@
                     let dayRecords = appData.records[dateKey];
                     let hasDataForDay = false;
                     let [yy, mm, dd] = dateKey.split('-');
-                    let dayText = `
-🗓️ *${dd}-${mm}-${yy}*
-`;
+                    let dayText = `\n🗓️ *${dd}-${mm}-${yy}*\n`;
                     
                     let dayParties = appData.parties[dateKey] || [];
                     let partyMap = {};
@@ -668,16 +669,22 @@
                             let pInfo = partyMap[pKey] || { name: "अज्ञात", station: "-" };
                             let parts = [`₹${entry.received || 0}`];
                             
-                            let recAmount = parseFloat(entry.received || 0); let extAmount = parseFloat(entry.extra || 0); let discAmount = parseFloat(entry.discount || 0);
+                            let recAmount = parseFloat(entry.received || 0);
+                            let extAmount = parseFloat(entry.extra || 0);
+                            let discAmount = parseFloat(entry.discount || 0);
 
-                            if (entry.mode === 'Online') { parts.push(`(ऑनलाइन: ${entry.remark || '-'})`); totalOnline += (recAmount + extAmount); } 
-                            else { totalCash += recAmount; totalExtCash += extAmount; }
+                            if (entry.mode === 'Online') {
+                                parts.push(`(ऑनलाइन: ${entry.remark || '-'})`);
+                                totalOnline += (recAmount + extAmount);
+                            } else {
+                                totalCash += recAmount;
+                                totalExtCash += extAmount;
+                            }
                             
                             if (entry.discount && discAmount > 0) parts.push(`छूट: ₹${entry.discount}`);
                             if (entry.extra && extAmount > 0) parts.push(`एक्स्ट्रा: ₹${entry.extra}`);
                             
-                            dayText += `🔹 ${pInfo.name} -> ${parts.join(' | ')}
-`;
+                            dayText += `🔹 ${pInfo.name} -> ${parts.join(' | ')}\n`;
                             totalDisc += discAmount; count++;
                         }
                     }
@@ -687,15 +694,10 @@
 
             if(count === 0) { document.getElementById('report-output').innerText = "इस तारीख के बीच कोई सेव किया हुआ डेटा नहीं मिला।"; currentReportText = ""; return; }
             
-            finalReport += `
-------------------
-💵 *कुल कैश प्राप्त:* ₹${totalCash}`;
-            if (totalExtCash > 0) finalReport += `
-📈 *कुल अतिरिक्त कैश:* ₹${totalExtCash}`;
-            if (totalOnline > 0) finalReport += `
-📱 *कुल ऑनलाइन:* ₹${totalOnline}`;
-            if (totalDisc > 0) finalReport += `
-📉 *कुल छूट:* ₹${totalDisc}`;
+            finalReport += `\n------------------\n💵 *कुल कैश प्राप्त:* ₹${totalCash}`;
+            if (totalExtCash > 0) finalReport += `\n📈 *कुल अतिरिक्त कैश:* ₹${totalExtCash}`;
+            if (totalOnline > 0) finalReport += `\n📱 *कुल ऑनलाइन:* ₹${totalOnline}`;
+            if (totalDisc > 0) finalReport += `\n📉 *कुल छूट:* ₹${totalDisc}`;
             
             document.getElementById('report-output').innerText = finalReport; currentReportText = finalReport;
         }
@@ -704,6 +706,8 @@
             if(!currentReportText) { generateReport(); if(!currentReportText) return; }
             window.open("https://wa.me/?text=" + encodeURIComponent(currentReportText), '_blank');
         }
-    </script>
+
+</script>
 </body>
 </html>
+          
